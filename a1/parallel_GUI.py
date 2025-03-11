@@ -5,7 +5,7 @@ import matplotlib
 import matplotlib.backends.backend_tkagg as tkagg
 import numpy as np
 import pathlib
-import a1
+import parallel
 
 
 class FloatEntry(tkinter.Entry):
@@ -179,7 +179,7 @@ class GUI:
     """Class representing the GUI."""
 
     # The keys are both names which will be used to refer to the corresponding
-    # parameter in this code, and the parameter name in the call to a1.plot().
+    # parameter in this code, and the parameter name in the call to parallel.plot().
     # The labels are just that: labels displayed in the GUI for the parameter.
 
     keys_1dof = 'm1,b1,k1,l1,f1'   # Params needed for 1 D.O.F calculations
@@ -197,7 +197,7 @@ class GUI:
         # Initialise Tk and set window title
 
         self.root = tkinter.Tk()
-        self.root.title('A1')
+        self.root.title('Parallel')
 
         # Create matplotlib widgets
 
@@ -286,10 +286,10 @@ class GUI:
         prog_dir = pathlib.PurePath(__file__).parent
 
         self.diagram_1dof = tkinter.PhotoImage(
-            file=prog_dir / 'a1_diagram_1dof.png'
+            file=prog_dir / 'parallel_diagram_1dof.png'
         )
         self.diagram_2dof = tkinter.PhotoImage(
-            file=prog_dir / 'a1_diagram_2dof.png'
+            file=prog_dir / 'parallel_diagram_2dof.png'
         )
 
         self.label_diagram = tkinter.Label(
@@ -363,11 +363,11 @@ class GUI:
 
         if self.enabled_2dof.get() == 0:
             args = self.keys_1dof
-            MKLF = a1.MLKF_1dof
+            MKLF = parallel.MLKF_1dof
             kwargs = {}
         else:
             args = f'{self.keys_1dof},{self.keys_2dof}'
-            MKLF = a1.MLKF_2dof
+            MKLF = parallel.MLKF_2dof
             kwargs = {'f2': 0}
 
         kwargs |= {arg: self.params[arg] for arg in args.split(',')}
@@ -383,7 +383,7 @@ class GUI:
         else:
             phase = 1
 
-        a1.plot(
+        parallel.plot(
             self.fig,
             hz, sec,
             M, L, K, F,
