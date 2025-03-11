@@ -1,0 +1,339 @@
+#! /usr/bin/env python3
+
+import argparse
+import numpy as np
+import scipy.integrate
+import matplotlib.pyplot as plt
+
+
+def freq_response_1dof_series_inerter(w_list, m1, b1, l1, k1, f1):
+    """Return complex frequency response of 1DOF system with inerter in series with spring-damper"""
+    response = []
+    
+    for w in w_list:
+        # Calculate the transfer function directly based on the derived equations
+        # For a series inerter-spring-damper system
+        s = 1j * w
+        # Impedance of the spring-damper
+        Z_sd = k1/s + l1
+        # Impedance of the inerter
+        Z_b = b1 * s
+        # Total impedance in series
+        Z_total = Z_sd + Z_b
+        # Transfer function
+        H = 1 / (m1 * s**2 + Z_sd * b1 * s**2 / Z_total)
+        # Response amplitude
+        response.append(H * f1)
+    
+    return np.array(response)
+
+
+def freq_response_2dof_series_inerter(w_list, m1, b1, l1, k1, f1, m2, b2, l2, k2, f2):
+    """Return complex frequency response of 2DOF system with inerters in series with spring-dampers"""
+    response = np.zeros((len(w_list), 2), dtype=complex)
+    
+    for i, w in enumerate(w_list):
+        s = 1j * w
+        
+        # Calculate impedances for both spring-damper systems
+        Z_sd1 = k1/s + l1
+        Z_sd2 = k2/s + l2
+        
+        # Calculate impedances for both inerters
+        Z_b1 = b1 * s
+        Z_b2 = b2 * s
+        
+        # Calculate effective impedances for series connections
+        Z_eff1 = (Z_sd1 * Z_b1) / (Z_sd1 + Z_b1)
+        Z_eff2 = (Z_sd2 * Z_b2) / (Z_sd2 + Z_b2)
+        
+        # Build the 2x2 impedance matrix
+        Z_matrix = np.array([
+            [m1 * s**2 + Z_eff1 + Z_eff2, -Z_eff2],
+            [-Z_eff2, m2 * s**2 + Z_eff2]
+        ])
+        
+        # Force vector
+        F_vector = np.array([f1, f2])
+        
+        # Solve for displacements
+        response[i] = np.linalg.solve(Z_matrix, F_vector)
+    
+    return response
+
+
+def time_response(t_list, M, L, K, F):
+    """Return time response of system using state-space approach"""
+    mm = M.diagonal()
+
+    def slope(t, y):
+        xv = y.reshape((2, -1))
+        a = (F - L@xv[1] - K@xv[0]) / mm
+        s = np.concatenate((xv[1], a))
+        return s
+
+    solution = scipy.integrate.solve_ivp(
+        fun=slope,
+        t_span=(t_list[0], t_list[-1]),
+        y0=np.zeros(len(mm) * 2),
+        method='Radau',
+        t_eval=t_list
+    )
+
+    return solution.y[0:len(mm), :].T
+
+
+def last_nonzero(arr, axis, invalid_val=-1):
+    """Return index of last non-zero element of an array"""
+    mask = (arr != 0)
+    val = arr.shape[axis] - np.flip(mask, axis=axis).argmax(axis=axis) - 1
+    return np.where(mask.any(axis=axis), val, invalid_val)
+
+
+def plot_freq_time_response(fig, hz, sec, f_response, t_response, show_phase=None):
+    """Plot frequency and time domain responses"""
+    # Calculate frequency response amplitude
+    f_amplitude = np.abs(f_response)
+    
+    # Determine suitable legends
+    f_legends = (
+        'm{} peak {:.4g} metre at {:.4g} Hz'.format(
+            i+1,
+            f_amplitude[m][i],
+            hz[m]
+        )
+        for i, m in enumerate(np.argmax(f_amplitude, axis=0))
+    )
+
+    equilib = np.abs(f_response[0])  # Zero Hz response
+    toobig = abs(100 * (t_response - equilib) / equilib) >= 2
+    lastbig = last_nonzero(toobig, axis=0, invalid_val=len(sec)-1)
+
+    t_legends = (
+        'm{} settled to 2% beyond {:.4g} sec'.format(
+            i+1,
+            sec[lastbig[i]]
+        )
+        for i, _ in enumerate(t_response.T)
+    )
+
+    # Create plot
+    fig.clear()
+
+    if show_phase is not None:
+        ax = [
+            fig.add_subplot(3, 1, 1),
+            fig.add_subplot(3, 1, 2),
+            fig.add_subplot(3, 1, 3)
+        ]
+        ax[1].sharex(ax[0])
+    else:
+        ax = [
+            fig.add_subplot(2, 1, 1),
+            fig.add_subplot(2, 1, 2)
+        ]
+
+    ax[0].set_title('Amplitude of frequency domain response to sinusoidal force')
+    ax[0].set_xlabel('Frequency/hertz')
+    ax[0].set_ylabel('Amplitude/metre')
+    ax[0].legend(ax[0].plot(hz, f_amplitude), f_legends)
+
+    if show_phase is not None:
+        p_legends = (f'm{i+1}' for i in range(f_response.shape[1]))
+
+        f_phases = f_response
+        if show_phase == 0:
+            ax[1].set_title(f'Phase of frequency domain response to sinusoidal force')
+        else:
+            f_phases /= f_response[:, show_phase-1:show_phase]
+            ax[1].set_title(f'Phase, relative to m{show_phase}, of frequency domain response to sinusoidal force')
+        f_phases = np.degrees(np.angle(f_phases))
+
+        ax[1].set_xlabel('Frequency/hertz')
+        ax[1].set_ylabel('Phase/°')
+        ax[1].legend(ax[1].plot(hz, f_phases), p_legends)
+
+    ax[-1].set_title('Time domain response to step force')
+    ax[-1].set_xlabel('Time/second')
+    ax[-1].set_ylabel('Displacement/metre')
+    ax[-1].legend(ax[-1].plot(sec, t_response), t_legends)
+
+    fig.tight_layout()
+
+
+def time_domain_simulation_1dof(sec, m1, b1, l1, k1, f1):
+    """Perform time domain simulation for 1DOF with series inerter using state-space approach"""
+    # For time domain, we need to use state-space approach that accounts for the series inerter
+    # For this, we'll use numerical integration with a modified state vector
+    
+    # We need 3 states: mass position, mass velocity, and the position of the inerter-spring connection
+    def dynamics(t, state):
+        # state = [x, v, y] where x is mass position, v is mass velocity, y is inerter-spring connection
+        x, v, y = state
+        
+        # Force through spring-damper
+        f_sd = k1 * y + l1 * (v - (v - 0))  # assuming ground velocity is 0
+        
+        # Acceleration of mass
+        a = (f1 - f_sd) / m1
+        
+        # Acceleration at the inerter-spring connection
+        a_y = f_sd / b1
+        
+        # State derivatives
+        dx_dt = v
+        dv_dt = a
+        dy_dt = a_y
+        
+        return [dx_dt, dv_dt, dy_dt]
+    
+    # Initial conditions (all zero)
+    initial_state = [0, 0, 0]
+    
+    # Time points for integration
+    t_eval = np.linspace(0, sec[-1], len(sec))
+    
+    # Solve ODE
+    solution = scipy.integrate.solve_ivp(
+        fun=dynamics,
+        t_span=(0, sec[-1]),
+        y0=initial_state,
+        method='Radau',
+        t_eval=t_eval
+    )
+    
+    # Return mass position
+    return solution.y[0].reshape(-1, 1)
+
+
+def time_domain_simulation_2dof(sec, m1, b1, l1, k1, f1, m2, b2, l2, k2, f2):
+    """Perform time domain simulation for 2DOF with series inerters using state-space approach"""
+    # For 2DOF, we need 6 states: positions and velocities of both masses, and positions of both inerter-spring connections
+    
+    def dynamics(t, state):
+        # state = [x1, v1, x2, v2, y1, y2]
+        x1, v1, x2, v2, y1, y2 = state
+        
+        # Forces through spring-dampers
+        f_sd1 = k1 * y1 + l1 * (0)  # Assuming ground is fixed
+        f_sd2 = k2 * (y2 - x1) + l2 * (0 - v1)  # Connection between masses
+        
+        # Accelerations of masses
+        a1 = (f1 - f_sd1 - f_sd2) / m1
+        a2 = (f2 + f_sd2) / m2
+        
+        # Accelerations at the inerter-spring connections
+        a_y1 = f_sd1 / b1
+        a_y2 = f_sd2 / b2
+        
+        # State derivatives
+        dx1_dt = v1
+        dv1_dt = a1
+        dx2_dt = v2
+        dv2_dt = a2
+        dy1_dt = a_y1
+        dy2_dt = a_y2
+        
+        return [dx1_dt, dv1_dt, dx2_dt, dv2_dt, dy1_dt, dy2_dt]
+    
+    # Initial conditions (all zero)
+    initial_state = [0, 0, 0, 0, 0, 0]
+    
+    # Time points for integration
+    t_eval = np.linspace(0, sec[-1], len(sec))
+    
+    # Solve ODE
+    solution = scipy.integrate.solve_ivp(
+        fun=dynamics,
+        t_span=(0, sec[-1]),
+        y0=initial_state,
+        method='Radau',
+        t_eval=t_eval
+    )
+    
+    # Return mass positions
+    return np.column_stack((solution.y[0], solution.y[2]))
+
+
+def arg_parser():
+    ap = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        description='''
+            For a system with one or two degrees of freedom, show the
+            frequency domain response to an applied sinusoidal force,
+            and the time domain response to an step force.
+    ''')
+
+    ap.add_argument('--m1', type=float, default=7.88, help='Mass 1')
+    ap.add_argument('--b1', type=float, default=7.88, help='Inertence 1') 
+    ap.add_argument('--l1', type=float, default=3.96, help='Damping 1')
+    ap.add_argument('--k1', type=float, default=4200, help='Spring 1')
+    ap.add_argument('--f1', type=float, default=0.25, help='Force 1')
+
+    ap.add_argument('--m2', type=float, default=None, help='Mass 2')
+    ap.add_argument('--b2', type=float, default=7.88, help='Inertence 2')
+    ap.add_argument('--l2', type=float, default=1, help='Damping 2')
+    ap.add_argument('--k2', type=float, default=106.8, help='Spring 2')
+    ap.add_argument('--f2', type=float, default=0, help='Force 2')
+
+    ap.add_argument(
+        '--hz', type=float, nargs=2, default=(0, 5),
+        help='Frequency range'
+    )
+    ap.add_argument(
+        '--sec', type=float, default=30,
+        help='Time limit'
+    )
+
+    ap.add_argument(
+        '--show-phase', type=int, nargs='?', const=0,
+        help='''Show the frequency domain phase response(s).
+        If this option is given without a value then phases are shown
+        relative to the excitation.
+        If a value is given then phases are shown relative to the
+        phase of the mass with that number.
+    ''')
+
+    return ap
+
+
+def main():
+    """Main program"""
+    # Read command line
+    ap = arg_parser()
+    args = ap.parse_args()
+
+    # Generate frequency and time arrays
+    hz = np.linspace(args.hz[0], args.hz[1], 10001)
+    w_list = hz * 2*np.pi
+    sec = np.linspace(0, args.sec, 10001)
+
+    # Calculate frequency and time responses
+    if args.m2 is None:
+        # 1DOF system
+        f_response = freq_response_1dof_series_inerter(
+            w_list, args.m1, args.b1, args.l1, args.k1, args.f1
+        )
+        t_response = time_domain_simulation_1dof(
+            sec, args.m1, args.b1, args.l1, args.k1, args.f1
+        )
+    else:
+        # 2DOF system
+        f_response = freq_response_2dof_series_inerter(
+            w_list, args.m1, args.b1, args.l1, args.k1, args.f1,
+            args.m2, args.b2, args.l2, args.k2, args.f2
+        )
+        t_response = time_domain_simulation_2dof(
+            sec, args.m1, args.b1, args.l1, args.k1, args.f1,
+            args.m2, args.b2, args.l2, args.k2, args.f2
+        )
+
+    # Plot results
+    fig = plt.figure()
+    plot_freq_time_response(fig, hz, sec, f_response, t_response, args.show_phase)
+    fig.canvas.mpl_connect('resize_event', lambda x: fig.tight_layout(pad=2.5))
+    plt.show()
+
+
+if __name__ == '__main__':
+    main()

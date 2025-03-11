@@ -8,20 +8,42 @@ import matplotlib.pyplot as plt
 
 def MLKF_1dof(m1, b1, l1, k1, f1):
     """Return mass, damping, stiffness & force matrices for 1DOF system with inerter in series with damper and spring"""
-    M = np.array([[m1]])  # Mass remains unchanged
-    L = np.array([[l1 / (1 + b1 / m1)]])  # Adjusted damping
-    K = np.array([[k1 / (1 + b1 / m1)]])  # Adjusted stiffness
+    # For 1DOF system with inerter in series with parallel spring-damper
+    # The effective mass remains unchanged
+    M = np.array([[m1]])
+    
+    # For series connection, we need to calculate the equivalent parameters
+    # Impedance-based approach for inerter in series with parallel spring-damper
+    L = np.array([[l1 * m1 / (m1 + b1)]])  # Effective damping with series inerter
+    K = np.array([[k1 * m1 / (m1 + b1)]])  # Effective stiffness with series inerter
     F = np.array([f1])
+    
     return M, L, K, F
 
 
 def MLKF_2dof(m1, b1, l1, k1, f1, m2, b2, l2, k2, f2):
     """Return mass, damping, stiffness & force matrices for 2DOF system with inerters in series with dampers and springs"""
-    M = np.array([[m1, 0], [0, m2]])  # Mass matrix unchanged
-    L = np.array([[l1 / (1 + b1 / m1) + l2 / (1 + b2 / m2), -l2 / (1 + b2 / m2)], 
-                  [-l2 / (1 + b2 / m2), l2 / (1 + b2 / m2)]])  # Adjusted damping
-    K = np.array([[k1 / (1 + b1 / m1) + k2 / (1 + b2 / m2), -k2 / (1 + b2 / m2)], 
-                  [-k2 / (1 + b2 / m2), k2 / (1 + b2 / m2)]])  # Adjusted stiffness
+    # Mass matrix is unchanged
+    M = np.array([[m1, 0], [0, m2]])
+    
+    # Calculate effective parameters for each inerter-spring-damper branch
+    l1_eff = l1 * m1 / (m1 + b1)  # Effective damping for first mass
+    k1_eff = k1 * m1 / (m1 + b1)  # Effective stiffness for first mass
+    l2_eff = l2 * m2 / (m2 + b2)  # Effective damping for second mass
+    k2_eff = k2 * m2 / (m2 + b2)  # Effective stiffness for second mass
+    
+    # Build damping matrix with effective parameters
+    L = np.array([
+        [l1_eff + l2_eff, -l2_eff],
+        [-l2_eff, l2_eff]
+    ])
+    
+    # Build stiffness matrix with effective parameters
+    K = np.array([
+        [k1_eff + k2_eff, -k2_eff],
+        [-k2_eff, k2_eff]
+    ])
+    
     F = np.array([f1, f2])
     return M, L, K, F
 
