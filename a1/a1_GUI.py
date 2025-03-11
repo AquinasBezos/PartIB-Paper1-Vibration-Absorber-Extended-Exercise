@@ -182,11 +182,11 @@ class GUI:
     # parameter in this code, and the parameter name in the call to a1.plot().
     # The labels are just that: labels displayed in the GUI for the parameter.
 
-    keys_1dof = 'm1,k1,l1,f1'   # Params needed for 1 D.O.F calculations
-    labels_1dof = 'm₁ =:kg,k₁ =:N/m,λ₁ =:Ns/m,f₁ =:N'
+    keys_1dof = 'm1,b1,k1,l1,f1'   # Params needed for 1 D.O.F calculations
+    labels_1dof = 'm₁ =:kg,b₁ =:Nm⁻¹s²,k₁ =:N/m,λ₁ =:Ns/m,f₁ =:N'
 
-    keys_2dof = 'm2,k2,l2'      # Extra params needed for 2 D.O.F calculations
-    labels_2dof = 'm₂ =:kg,k₂ =:N/m,λ₂ =:Ns/m'
+    keys_2dof = 'm2,b2,k2,l2'      # Extra params needed for 2 D.O.F calculations
+    labels_2dof = 'm₂ =:kg,b₂ =:Nm⁻¹s²,k₂ =:N/m,λ₂ =:Ns/m'
 
     def __init__(self):
 

@@ -6,27 +6,25 @@ import scipy.integrate
 import matplotlib.pyplot as plt
 
 
-def MLKF_1dof(m1, l1, k1, f1):
+def MLKF_1dof(m1, b1, l1, k1, f1):
 
-    """Return mass, damping, stiffness & force matrices for 1DOF system"""
+    """Return mass, damping, stiffness & force matrices for 1DOF system with inerter"""
 
-    M = np.array([[m1]])
+    M = np.array([[m1 + b1]])  # Inertence added to mass matrix
     L = np.array([[l1]])
     K = np.array([[k1]])
     F = np.array([f1])
-
     return M, L, K, F
 
 
-def MLKF_2dof(m1, l1, k1, f1, m2, l2, k2, f2):
+def MLKF_2dof(m1, b1, l1, k1, f1, m2, b2, l2, k2, f2):
 
-    """Return mass, damping, stiffness & force matrices for 2DOF system"""
-
-    M = np.array([[m1, 0], [0, m2]])
-    L = np.array([[l1+l2, -l2], [-l2, l2]])
-    K = np.array([[k1+k2, -k2], [-k2, k2]])
+    """Return mass, damping, stiffness & force matrices for 2DOF system with inerter"""
+    
+    M = np.array([[m1 + b1 + b2, -b2], [-b2, m2 + b2]])  # Corrected for inerter coupling
+    L = np.array([[l1 + l2, -l2], [-l2, l2]])
+    K = np.array([[k1 + k2, -k2], [-k2, k2]])
     F = np.array([f1, f2])
-
     return M, L, K, F
 
 
@@ -159,11 +157,13 @@ def arg_parser():
     ''')
 
     ap.add_argument('--m1', type=float, default=7.88, help='Mass 1')
+    ap.add_argument('--b1', type=float, default=7.88, help='Inertence 1') #included inertence 1
     ap.add_argument('--l1', type=float, default=3.96, help='Damping 1')
     ap.add_argument('--k1', type=float, default=4200, help='Spring 1')
     ap.add_argument('--f1', type=float, default=0.25, help='Force 1')
 
     ap.add_argument('--m2', type=float, default=None, help='Mass 2')
+    ap.add_argument('--b2', type=float, default=7.88, help='Inertence 2') #included inertence 2
     ap.add_argument('--l2', type=float, default=1, help='Damping 2')
     ap.add_argument('--k2', type=float, default=106.8, help='Spring 2')
     ap.add_argument('--f2', type=float, default=0, help='Force 2')
@@ -202,12 +202,12 @@ def main():
 
     if args.m2 is None:
         M, L, K, F = MLKF_1dof(
-            args.m1, args.l1, args.k1, args.f1
+            args.m1, args.b1, args.l1, args.k1, args.f1
         )
     else:
         M, L, K, F = MLKF_2dof(
-            args.m1, args.l1, args.k1, args.f1,
-            args.m2, args.l2, args.k2, args.f2
+            args.m1, args.b1, args.l1, args.k1, args.f1,
+            args.m2, args.b2, args.l2, args.k2, args.f2
         )
 
     # Generate frequency and time arrays
